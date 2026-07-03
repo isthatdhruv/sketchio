@@ -60,7 +60,8 @@ src/
 Three levels; keys/constraints are first-class objects, **not** column flags (the prototype's `pk:1` flags are replaced; canvas badges are derived).
 
 ```ts
-Workspace: { id, name, settings: { defaultEngine, defaultCharset, defaultCollation },
+Workspace: { id, name, schemaVersion,
+             settings: { defaultEngine, defaultCharset, defaultCollation },
              tables: Table[], logicalEdges: LogicalEdge[], viewport }
 
 Table:    { id, name, comment?, engine?, charset?, collation?, autoIncrementStart?,
@@ -93,7 +94,7 @@ Single source of truth: every MySQL 8.0 type, its parameter shape, and which att
 - **String:** CHAR(n), VARCHAR(n) (length required), TINYTEXT/TEXT/MEDIUMTEXT/LONGTEXT, BINARY(n), VARBINARY(n), TINYBLOB/BLOB/MEDIUMBLOB/LONGBLOB, ENUM(values…), SET(values…) — ENUM/SET get a value-list editor. Charset/collation apply to text types only.
 - **Date/time:** DATE, TIME(fsp), DATETIME(fsp), TIMESTAMP(fsp), YEAR. DATETIME/TIMESTAMP support `DEFAULT CURRENT_TIMESTAMP(fsp)` and `ON UPDATE CURRENT_TIMESTAMP(fsp)`.
 - **JSON.**
-- **Spatial:** GEOMETRY, POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON, GEOMETRYCOLLECTION (SPATIAL index only on these, NOT NULL required for SPATIAL index).
+- **Spatial:** GEOMETRY, POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING, MULTIPOLYGON, GEOMETRYCOLLECTION (optional SRID attribute; SPATIAL index only on these, NOT NULL required for SPATIAL index).
 - Parser normalizes aliases (INTEGER→INT, NUMERIC→DECIMAL, BOOL/BOOLEAN→TINYINT(1), SERIAL→BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE).
 - Attribute applicability enforced: UNSIGNED/ZEROFILL numeric-only; AUTO_INCREMENT integer-only, one per table, must be part of a key; fsp 0–6 on time types; TEXT/BLOB/JSON/GEOMETRY defaults must be expression defaults `(expr)` (8.0.13+ syntax), not literals; generated columns can't be AUTO_INCREMENT or have DEFAULT.
 
@@ -120,7 +121,7 @@ Below the tabs: **live SQL preview** — the selected table's generated `CREATE 
 
 Toolbar tools; each is click-source-then-click-target on the canvas:
 
-- **1:N** — click parent, then child. Creates FK column(s) in the child mirroring the parent's PK (name `{parentTable}_{pkColumn}`, collision-suffixed; type copied incl. UNSIGNED), an index on them, and the FK constraint. Edge appears automatically.
+- **1:N** — click parent, then child. Creates FK column(s) in the child mirroring the parent's PK (name `{parentTable}_{pkColumn}`, collision-suffixed; type copied incl. UNSIGNED), an index on them, and the FK constraint. Edge appears automatically. Generated object names are deterministic and collision-suffixed: constraints `fk_{child}_{parent}`, unique indexes `uq_{table}_{cols}`, plain indexes `idx_{table}_{cols}`.
 - **1:1** — same, plus a UNIQUE index on the FK column(s).
 - **N:M** — click A, then B. Creates junction table `{a}_{b}` (collision-suffixed) with FK columns to both PKs and a composite PRIMARY KEY; two FK edges appear. Junction table is a normal table thereafter.
 - **Logical link** — annotation edge with user-picked cardinality (1-1 / 1-N / N-1 / N-M) and optional label; dashed rendering; produces no DDL. (Successor of the prototype's ref/name/json edge kinds.)
@@ -129,7 +130,7 @@ FK-backed edges are **derived** — one edge per FK constraint, N at the child e
 
 ### Editing verbs & shortcuts
 
-Undo/redo across every schema/layout mutation (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Delete key removes selected table/edge (confirm for tables). Duplicate table (copy suffixed, sans FKs). Escape exits link mode / closes popovers. All destructive actions confirm.
+Undo/redo across every schema/layout mutation (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Delete key removes selected table/edge (confirm for tables). Duplicate table copies columns and indexes with a suffixed name; FK constraints are not copied (constraint names must stay unique and dangling semantics get murky). Escape exits link mode / closes popovers. All destructive actions confirm.
 
 ### Validation panel
 
@@ -145,7 +146,7 @@ Deterministic full-script generation: header comment, `SET FOREIGN_KEY_CHECKS=0;
 
 `parseDDL(sql): { schema, issues[] }` — our own interface; a proven MySQL parser library underneath (candidate `node-sql-parser`; final selection is an implementation-plan task with a bake-off against the test corpus, swappable behind the interface). Behavior:
 
-- Splits the script into statements; handles `CREATE TABLE` (all column/index/FK forms above, inline or clause-level) and `ALTER TABLE ADD CONSTRAINT/INDEX/COLUMN`; silently skips non-DDL (INSERT, SET, USE, DROP, comments).
+- Splits the script into statements; handles `CREATE TABLE` (all column/index/FK forms above, inline or clause-level) and `ALTER TABLE ADD CONSTRAINT/INDEX/COLUMN`; silently skips non-DDL (INSERT, SET, USE, DROP, comments). Exception: `-- logical:` comment lines (our own export convention) are parsed back into logical edges, so full round-trip includes them.
 - **Per-statement error recovery:** a failing statement is reported (line number + message) and skipped; the rest of the import proceeds. Result banner: "Imported N tables (M statements skipped)" with an expandable issue list.
 - Unresolvable FK references (missing table/column) become logical edges with a warning rather than being dropped.
 - Test corpus: Sakila, WordPress core schema, and a curated edge-case file (composite keys, generated columns, ENUM quoting, fsp, prefix indexes, spatial).
@@ -190,7 +191,7 @@ Plus max-size validation on writes. Rules deployed via Firebase console or CLI (
 
 ### Quota sanity (Spark)
 
-Writes: 1 autosave ≥ every 2 s of active editing but ≤ ~1/2s only while mutating; realistic sessions ≪ 20 K writes/day. Reads: dashboard = N metadata docs; editor open = 2. Comfortable headroom.
+Writes: at most one autosave per 2 s, and only while actively mutating; realistic sessions land far below Spark's 20 K writes/day. Reads: dashboard = N metadata docs; editor open = 2. Comfortable headroom.
 
 ## 8. Auth & routes
 
@@ -221,7 +222,7 @@ Client-side auth guard (loading gate until Firebase resolves auth state; redirec
 
 ## 11. Non-goals (v1)
 
-Real-time collaboration/sharing · connecting to a live MySQL server · ALTER/migration diffs between versions · views, triggers, procedures, events, partitioning · non-MySQL dialects · snapshots/version history · minimap, marquee multi-select (post-v1 canvas upgrades) · optimized mobile/touch editing · i18n.
+Real-time collaboration/sharing · connecting to a live MySQL server · ALTER/migration diffs between versions · views, triggers, procedures, events, partitioning · niche DDL corners: CHECK constraints, invisible columns, index `USING`/`KEY_BLOCK_SIZE`, `ROW_FORMAT`/tablespace options (import reports them as skipped-with-issue rather than silently dropping) · non-MySQL dialects · snapshots/version history · minimap, marquee multi-select (post-v1 canvas upgrades) · optimized mobile/touch editing · i18n.
 
 ## 12. Risks & mitigations
 
