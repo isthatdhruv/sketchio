@@ -20,3 +20,22 @@ describe('Canvas', () => {
     expect(screen.getByText('int')).toBeTruthy();
   });
 });
+
+describe('inline commits', () => {
+  it('renames table on blur commit', async () => {
+    const { commitInlineEdit } = await import('./interactions');
+    render(<Canvas />);
+    const name = screen.getByText('users');
+    name.textContent = 'customers';
+    commitInlineEdit(name as HTMLElement);
+    expect(useEditorStore.getState().content!.tables[0].name).toBe('customers');
+  });
+  it('empty rename is rejected', async () => {
+    const { commitInlineEdit } = await import('./interactions');
+    render(<Canvas />);
+    const name = screen.getByText('users');
+    name.textContent = '   ';
+    commitInlineEdit(name as HTMLElement);
+    expect(useEditorStore.getState().content!.tables[0].name).toBe('users');
+  });
+});
