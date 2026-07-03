@@ -4,7 +4,7 @@ import type { IndexKind, Table, TableIndex } from '@/lib/schema/types';
 import { useEditorStore } from '@/store/editorStore';
 import { addIndex, updateIndex, deleteIndex } from '@/lib/schema/ops/keys';
 import { specOf } from '@/lib/schema/datatypes';
-import { TextField, SelectField, CheckRow, NumField } from './fields';
+import { TextField, SelectField, CheckRow } from './fields';
 
 const KINDS: Array<[IndexKind, string]> = [
   ['primary', 'PRIMARY'], ['unique', 'UNIQUE'], ['index', 'INDEX'], ['fulltext', 'FULLTEXT'], ['spatial', 'SPATIAL'],

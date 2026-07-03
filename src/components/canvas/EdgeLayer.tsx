@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { deriveEdges, CARD_SYMBOLS } from '@/lib/schema/derive';
 import { tableById } from '@/lib/schema/ops/tables';
 import { nodeRect, onEdgeRender } from './registry';
+import { isEdgeKindHidden, onEdgeVisibility, edgeVisibilityVersion } from './edgeVisibility';
 
 interface Rect { x: number; y: number; w: number; h: number }
 interface Point { x: number; y: number }
@@ -39,6 +40,7 @@ export function computeEdgePath(a: Rect, b: Rect, selfLoop: boolean): { d: strin
 export function EdgeLayer() {
   const content = useEditorStore(s => s.content);
   const selection = useEditorStore(s => s.selection);
+  useSyncExternalStore(onEdgeVisibility, edgeVisibilityVersion, edgeVisibilityVersion);
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => onEdgeRender(() => {
@@ -77,7 +79,7 @@ export function EdgeLayer() {
         const sel = selection.kind === 'edge' && selection.edgeId === e.id;
         const [sa, sb] = CARD_SYMBOLS[e.cardinality];
         return (
-          <g key={e.id} data-edge-group={e.id}>
+          <g key={e.id} data-edge-group={e.id} className={isEdgeKindHidden(e.kind) ? 'edge-hidden' : undefined}>
             <path className="ehit" data-edge={e.id} d={geo.d} style={{ pointerEvents: 'stroke' }} />
             <path className={`edge edge-${e.kind}${sel ? ' sel' : ''}`} data-edge={e.id} d={geo.d}
               markerEnd={`url(#ar-${e.kind})`} />

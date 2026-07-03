@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
+import { addTable } from '@/lib/schema/ops/tables';
 import { TableNode } from './TableNode';
-import { bindWorld, setCamera, viewport, zoomAt } from './viewport';
+import { bindWorld, screenToWorld, setCamera, viewport, zoomAt } from './viewport';
 import { useCanvasInteractions } from './interactions';
 import { PopoverHost } from './popovers';
 import { EdgeLayer } from './EdgeLayer';
@@ -42,7 +43,17 @@ export function Canvas() {
       commitTimer = setTimeout(() => setViewportContent({ ...viewport }), 250);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => { el.removeEventListener('wheel', onWheel); clearTimeout(commitTimer); };
+    const onDblClick = (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement;
+      if (target.closest('.node') || target.closest('.panel') || target.closest('.cpop')) return;
+      const st = useEditorStore.getState();
+      if (!st.content || st.tool !== 'select') return;
+      const p = screenToWorld(el, ev.clientX, ev.clientY);
+      const r = addTable(st.content, p.x - 110, p.y - 20);
+      st.apply(r.content, { kind: 'table', tableId: r.tableId });
+    };
+    el.addEventListener('dblclick', onDblClick);
+    return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('dblclick', onDblClick); clearTimeout(commitTimer); };
   }, [setViewportContent, loaded]);
 
   if (!content) return null;
@@ -52,6 +63,13 @@ export function Canvas() {
         <EdgeLayer />
         {content.tables.map(t => <TableNode key={t.id} table={t} />)}
       </div>
+      {content.tables.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="rounded-2xl border border-dashed border-[var(--panel-border)] px-8 py-6 text-center text-[13px] text-[var(--muted)]">
+            Double-click the canvas or press <b className="text-[var(--ink)]">+ Table</b> to start designing
+          </div>
+        </div>
+      )}
       {tool !== 'select' && (
         <div id="linkbanner" className="panel">
           <span><b>Link mode:</b> {TOOL_HINTS[tool]}</span>
