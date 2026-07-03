@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Canvas } from '@/components/canvas/Canvas';
+import { Inspector } from '@/components/inspector/Inspector';
+import { ValidationPanel } from '@/components/inspector/ValidationPanel';
 import { ConfirmHost } from '@/components/ui/ConfirmDialog';
 import { useEditorStore, type Tool } from '@/store/editorStore';
 import { emptyContent, addTable, renameTable } from '@/lib/schema/ops/tables';
@@ -35,6 +37,8 @@ export default function DevPage() {
           if (st.content) { const r = addTable(st.content, 200, 300); st.apply(r.content, { kind: 'table', tableId: r.tableId }); }
         }}>+ Table</button>
       </div>
+      <Inspector />
+      <ValidationPanel />
       <ConfirmHost />
     </div>
   );
