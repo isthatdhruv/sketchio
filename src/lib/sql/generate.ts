@@ -65,7 +65,10 @@ export function generateTableSQL(t: Table, c: WorkspaceContent): string {
   const opts = [`ENGINE=${t.engine ?? c.settings.defaultEngine}`];
   if (t.autoIncrementStart != null) opts.push(`AUTO_INCREMENT=${t.autoIncrementStart}`);
   opts.push(`DEFAULT CHARSET=${t.charset ?? c.settings.defaultCharset}`);
-  opts.push(`COLLATE=${t.collation ?? c.settings.defaultCollation}`);
+  // a table-level charset override without an explicit collation must NOT inherit the
+  // workspace-default collation (it may belong to a different charset) — let MySQL pick
+  const collation = t.collation ?? (t.charset ? undefined : c.settings.defaultCollation);
+  if (collation) opts.push(`COLLATE=${collation}`);
   if (t.comment) opts.push(`COMMENT='${escapeStr(t.comment)}'`);
   return `CREATE TABLE ${escapeId(t.name)} (\n${lines.join(',\n')}\n) ${opts.join(' ')};`;
 }

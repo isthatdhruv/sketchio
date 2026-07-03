@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sketchio — MySQL ER Workspace
 
-## Getting Started
+Design MySQL 8.0 schemas visually — a MySQL Workbench-style EER canvas in the browser, with real DDL in and out.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Canvas editor**: pan/zoom world, draggable/resizable table cards, hover-tracing of related tables, curved relationship edges with cardinality labels (1/N), self-references, light/dark theme.
+- **Full MySQL 8.0 fidelity**: every column type (numerics, strings, ENUM/SET with value editors, date/time with fractional seconds, JSON, spatial with SRID), UNSIGNED/ZEROFILL, AUTO_INCREMENT, literal/expression/CURRENT_TIMESTAMP defaults, ON UPDATE, generated columns (VIRTUAL/STORED), per-column charset/collation, comments.
+- **Keys as first-class objects**: composite PRIMARY/UNIQUE/INDEX/FULLTEXT/SPATIAL with prefix lengths, DESC parts, invisible indexes; foreign keys with composite columns and ON DELETE/ON UPDATE actions.
+- **Workbench-style tools**: 1:N and 1:1 draw FK columns + constraints into the child; N:M auto-creates a junction table with composite PK; logical (annotation-only) links.
+- **Inspector**: Columns / Indexes / Foreign keys / Options tabs, live CREATE TABLE preview, schema lint panel.
+- **SQL both ways**: deterministic `.sql` export (runs on stock MySQL 8.0); import real dumps with per-statement error recovery and auto-layout. JSON workspace export/import and PNG image export.
+- **Workspaces**: Google / email sign-in, autosaving workspace list in Firestore (Spark plan — no server code), offline-tolerant, multi-session conflict banner, undo/redo everywhere.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Next.js 16 · React 19 · TypeScript · Tailwind 4 · Zustand + zundo · Firebase Auth + Firestore (client SDK only) · node-sql-parser · Vitest.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+1. `npm install`
+2. Create a Firebase project (free Spark plan) at console.firebase.google.com:
+   - **Authentication → Sign-in method**: enable **Google** and **Email/Password**.
+   - **Firestore Database**: create (production mode), then paste the contents of `firestore.rules` into Rules and publish.
+   - **Project settings → Your apps**: add a Web app, copy the config.
+3. `cp .env.local.example .env.local` and fill in the four `NEXT_PUBLIC_FIREBASE_*` values.
+4. `npm run dev` → http://localhost:3000
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy (Vercel)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Import the repo in Vercel (zero config), add the four `NEXT_PUBLIC_FIREBASE_*` env vars, deploy, then add your `*.vercel.app` domain to **Firebase Auth → Settings → Authorized domains**.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Development
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm test` — unit suite (schema ops, DDL generator golden files, parser corpus incl. Sakila, round-trip semantic equality, layout, store, components).
+- `npm run lint` / `npm run build`.
+- Design docs: `docs/superpowers/specs/`, implementation plan: `docs/superpowers/plans/`.

@@ -70,6 +70,17 @@ describe('generateTableSQL', () => {
   });
 });
 
+describe('charset override', () => {
+  it('omits workspace-default collation when the table overrides charset', () => {
+    const t = { ...content.tables[1], charset: 'latin1' };
+    const sql = generateTableSQL(t, content);
+    expect(sql).toContain('DEFAULT CHARSET=latin1');
+    expect(sql).not.toContain('COLLATE=utf8mb4_0900_ai_ci');
+    const withCollation = generateTableSQL({ ...t, collation: 'latin1_bin' }, content);
+    expect(withCollation).toContain('COLLATE=latin1_bin');
+  });
+});
+
 describe('generateScript', () => {
   it('wraps with FK checks and appends logical comments', () => {
     const s = generateScript(content);
