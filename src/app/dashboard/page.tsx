@@ -36,6 +36,8 @@ function Dashboard() {
     try { setItems(await listWorkspaces(user.uid)); setError(''); }
     catch { setError('Could not load workspaces.'); }
   }, [user]);
+  // setItems/setError only run after `await listWorkspaces` — never synchronously in the effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { refresh(); }, [refresh]);
 
   if (!user) return null;

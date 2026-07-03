@@ -1,5 +1,5 @@
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query,
+  collection, doc, getDoc, getDocs, onSnapshot, orderBy, query,
   serverTimestamp, updateDoc, writeBatch, type Unsubscribe,
 } from 'firebase/firestore';
 import type { WorkspaceContent, WorkspaceMeta } from '@/lib/schema/types';

@@ -6,14 +6,14 @@ import { useEditorStore } from '@/store/editorStore';
 import { emptyContent, addTable, renameTable, tableById } from '@/lib/schema/ops/tables';
 import { linkOneToMany } from '@/lib/schema/ops/relations';
 
-let users = '', orders = '';
+let orders = '';
 beforeEach(() => {
   let { content: c, tableId: u } = addTable(emptyContent(), 0, 0);
   c = renameTable(c, u, 'users');
   const r = addTable(c, 400, 0);
   c = renameTable(r.content, r.tableId, 'orders');
   c = linkOneToMany(c, u, r.tableId).content;
-  users = u; orders = r.tableId;
+  orders = r.tableId;
   useEditorStore.getState().initialize({ id: 'w', name: 'w', tableCount: 2, createdAt: 0, updatedAt: 0 }, c);
   useEditorStore.getState().setSelection({ kind: 'table', tableId: orders });
 });
