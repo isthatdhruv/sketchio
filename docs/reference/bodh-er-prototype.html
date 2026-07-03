@@ -1,0 +1,649 @@
+<title>Assessment App Flow</title>
+<style>
+  :root {
+    --bg:#e9edf3; --grid:rgba(58,72,96,.10);
+    --panel:#ffffff; --panel-2:#f4f7fb; --panel-border:#d0d8e4;
+    --node-bg:#ffffff; --node-border:#cfd8e5; --node-shadow:rgba(20,30,50,.10);
+    --ink:#1d2531; --muted:#6a7688; --faint:#95a0b2;
+    --accent:#0d9488;
+    --portal:#0d9488; --portal-soft:rgba(13,148,136,.10);
+    --clinical:#b45309; --clinical-soft:rgba(180,83,9,.10);
+    --st-live:#0e9f6e; --st-inert:#c97a0c; --st-dead:#e11d63;
+    --edge-fk:#0d9488; --edge-ref:#64748b; --edge-name:#e11d48; --edge-json:#8b5cf6;
+    --pk:#c2410c; --uq:#7c3aed; --js:#8b5cf6; --ix:#2563eb; --ai:#0e9f6e; --danger:#e11d48;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0c0f15; --grid:rgba(150,170,200,.06);
+      --panel:#141a23; --panel-2:#0f141b; --panel-border:#28313f;
+      --node-bg:#131922; --node-border:#2a3442; --node-shadow:rgba(0,0,0,.45);
+      --ink:#e6ecf4; --muted:#8b97a9; --faint:#5d697b;
+      --accent:#2dd4bf;
+      --portal:#2dd4bf; --portal-soft:rgba(45,212,191,.12);
+      --clinical:#f59e0b; --clinical-soft:rgba(245,158,11,.12);
+      --st-live:#34d399; --st-inert:#fbbf24; --st-dead:#fb7185;
+      --edge-fk:#2dd4bf; --edge-ref:#8794a8; --edge-name:#fb7185; --edge-json:#a78bfa;
+      --pk:#fb923c; --uq:#c4b5fd; --js:#a78bfa; --ix:#60a5fa; --ai:#34d399; --danger:#fb7185;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#e9edf3; --grid:rgba(58,72,96,.10);
+    --panel:#ffffff; --panel-2:#f4f7fb; --panel-border:#d0d8e4;
+    --node-bg:#ffffff; --node-border:#cfd8e5; --node-shadow:rgba(20,30,50,.10);
+    --ink:#1d2531; --muted:#6a7688; --faint:#95a0b2;
+    --accent:#0d9488;
+    --portal:#0d9488; --portal-soft:rgba(13,148,136,.10);
+    --clinical:#b45309; --clinical-soft:rgba(180,83,9,.10);
+    --st-live:#0e9f6e; --st-inert:#c97a0c; --st-dead:#e11d63;
+    --edge-fk:#0d9488; --edge-ref:#64748b; --edge-name:#e11d48; --edge-json:#8b5cf6;
+    --pk:#c2410c; --uq:#7c3aed; --js:#8b5cf6; --ix:#2563eb; --ai:#0e9f6e; --danger:#e11d48;
+  }
+  :root[data-theme="dark"] {
+    --bg:#0c0f15; --grid:rgba(150,170,200,.06);
+    --panel:#141a23; --panel-2:#0f141b; --panel-border:#28313f;
+    --node-bg:#131922; --node-border:#2a3442; --node-shadow:rgba(0,0,0,.45);
+    --ink:#e6ecf4; --muted:#8b97a9; --faint:#5d697b;
+    --accent:#2dd4bf;
+    --portal:#2dd4bf; --portal-soft:rgba(45,212,191,.12);
+    --clinical:#f59e0b; --clinical-soft:rgba(245,158,11,.12);
+    --st-live:#34d399; --st-inert:#fbbf24; --st-dead:#fb7185;
+    --edge-fk:#2dd4bf; --edge-ref:#8794a8; --edge-name:#fb7185; --edge-json:#a78bfa;
+    --pk:#fb923c; --uq:#c4b5fd; --js:#a78bfa; --ix:#60a5fa; --ai:#34d399; --danger:#fb7185;
+  }
+
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { font-family:var(--sans); color:var(--ink); background:var(--bg);
+    overflow:hidden; height:100vh; -webkit-font-smoothing:antialiased; }
+
+  #canvas { position:absolute; inset:0; overflow:hidden; cursor:grab; touch-action:none; }
+  #canvas.panning { cursor:grabbing; }
+  body.linking #canvas { cursor:crosshair; }
+
+  #edges { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+  #world { z-index:2; pointer-events:none; position:absolute; left:0; top:0; width:6400px; height:4000px;
+    transform-origin:0 0;
+    background-image:radial-gradient(var(--grid) 1.4px, transparent 1.4px); background-size:26px 26px; }
+
+  .edge { fill:none; stroke-width:1.6; opacity:.85; transition:opacity .15s; pointer-events:none; }
+  .edge-fk   { stroke:var(--edge-fk); }
+  .edge-ref  { stroke:var(--edge-ref); stroke-dasharray:7 5; }
+  .edge-name { stroke:var(--edge-name); stroke-dasharray:2 5; stroke-width:2; }
+  .edge-json { stroke:var(--edge-json); stroke-dasharray:9 4 2 4; }
+  .edge.sel  { opacity:1; stroke-width:3; }
+  .edge.hidden, .ehit.hidden, .elabel.hidden { display:none; }
+  .ehit { stroke:transparent; stroke-width:16; fill:none; pointer-events:none; }
+  body.editing .ehit { pointer-events:stroke; cursor:pointer; }
+  .elabel { font-family:var(--sans); font-size:10px; font-weight:700; fill:var(--ink);
+    stroke:var(--bg); stroke-width:3px; paint-order:stroke; text-anchor:middle;
+    dominant-baseline:central; pointer-events:none; }
+
+  #canvas.focus .edge:not(.hi) { opacity:.06; }
+  #canvas.focus .node:not(.hi) { opacity:.22; }
+
+  .node { position:absolute; background:var(--node-bg); border:1px solid var(--node-border);
+    border-radius:10px; box-shadow:0 6px 22px -8px var(--node-shadow);
+    display:flex; flex-direction:column; overflow:hidden; z-index:10;
+    min-width:200px; min-height:60px; pointer-events:auto; }
+  .node.clinical { border-top:3px solid var(--clinical); }
+  .node.portal   { border-top:3px solid var(--portal); }
+  .node.sel { box-shadow:0 0 0 2px var(--accent), 0 10px 30px -8px var(--node-shadow); }
+  body.linking .node:hover { box-shadow:0 0 0 2px var(--accent); }
+  .node.linksrc { box-shadow:0 0 0 2px var(--accent), 0 0 0 6px color-mix(in srgb,var(--accent) 25%,transparent); }
+
+  .node-head { padding:8px 10px 7px; cursor:grab; user-select:none;
+    background:var(--panel-2); border-bottom:1px solid var(--node-border); }
+  .node.clinical .node-head { background:var(--clinical-soft); }
+  .node.portal   .node-head { background:var(--portal-soft); }
+  .node-head:active { cursor:grabbing; }
+  .th-row { display:flex; align-items:center; gap:7px; }
+  .tname { font-family:var(--mono); font-weight:600; font-size:13.5px; letter-spacing:-.1px; }
+  .status { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+    padding:2px 6px; border-radius:20px; line-height:1; border:0; cursor:default; }
+  .status.live  { color:var(--st-live);  background:color-mix(in srgb, var(--st-live) 15%, transparent); }
+  .status.inert { color:var(--st-inert); background:color-mix(in srgb, var(--st-inert) 15%, transparent); }
+  .status.dead  { color:var(--st-dead);  background:color-mix(in srgb, var(--st-dead) 15%, transparent); }
+  .st-view { margin-left:auto; }
+  .ent { margin-top:3px; font-size:10.5px; color:var(--muted); }
+  .hd-tools { margin-left:auto; display:none; align-items:center; gap:4px; }
+  body.editing .hd-tools { display:inline-flex; }
+  body.editing .st-view { display:none; }
+  .hd-tools button { font-family:var(--sans); font-size:10px; font-weight:700; cursor:pointer;
+    border:1px solid var(--node-border); background:var(--node-bg); color:var(--muted);
+    border-radius:6px; padding:2px 6px; line-height:1.3; }
+  .hd-tools button:hover { border-color:var(--accent); color:var(--accent); }
+  .hd-tools button.del:hover { border-color:var(--danger); color:var(--danger); }
+  .hd-tools .status { cursor:pointer; }
+
+  .cols { overflow-y:auto; flex:1; }
+  .col { display:flex; align-items:center; gap:6px; padding:3px 10px;
+    font-family:var(--mono); font-size:11.5px; line-height:1.5;
+    border-bottom:1px solid color-mix(in srgb, var(--node-border) 45%, transparent); }
+  .col:last-child { border-bottom:0; }
+  .col .cn { color:var(--ink); white-space:nowrap; }
+  .col.pk .cn { font-weight:700; }
+  .col .ct { margin-left:auto; color:var(--faint); font-size:10.5px; white-space:nowrap; }
+  .col .cdef { color:var(--st-inert); }
+  .badges { display:inline-flex; gap:3px; flex-wrap:wrap; }
+  .tag { font-size:8.5px; font-weight:700; letter-spacing:.02em; padding:1px 4px;
+    border-radius:4px; line-height:1.35; font-family:var(--sans); }
+  .tag.t-pk { color:#fff; background:var(--pk); }
+  .tag.t-fk { color:var(--edge-fk); border:1px solid var(--edge-fk); }
+  .tag.t-u  { color:var(--uq); border:1px solid var(--uq); }
+  .tag.t-nn { color:var(--muted); border:1px solid var(--muted); }
+  .tag.t-ai { color:var(--ai); border:1px solid var(--ai); }
+  .tag.t-un { color:var(--faint); border:1px solid var(--faint); }
+  .tag.t-ix { color:var(--ix); border:1px solid var(--ix); }
+  .tag.t-j  { color:var(--js); border:1px solid var(--js); }
+
+  .coledit { display:none; border:0; background:transparent; color:var(--faint); cursor:pointer;
+    font-size:11px; line-height:1; padding:0 2px; margin-left:2px; }
+  body.editing .col:hover .coledit { display:inline-block; }
+  .coledit:hover { color:var(--accent); }
+  .addcol { display:none; width:100%; text-align:left; font-family:var(--sans); font-size:10.5px;
+    color:var(--accent); background:transparent; border:0; border-top:1px dashed var(--node-border);
+    padding:5px 10px; cursor:pointer; }
+  body.editing .addcol { display:block; }
+  .addcol:hover { background:var(--panel-2); }
+
+  .editable { outline:none; border-radius:3px; }
+  body.editing .editable { cursor:text; }
+  body.editing .editable:hover { background:color-mix(in srgb,var(--accent) 8%,transparent); }
+  .editable:focus { background:color-mix(in srgb,var(--accent) 14%,transparent); box-shadow:inset 0 0 0 1px var(--accent); }
+
+  .rz { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:12; }
+  .rz::after { content:""; position:absolute; right:3px; bottom:3px; width:7px; height:7px;
+    border-right:2px solid var(--faint); border-bottom:2px solid var(--faint); border-radius:0 0 2px 0; }
+
+  .panel { position:absolute; background:color-mix(in srgb, var(--panel) 90%, transparent);
+    backdrop-filter:blur(10px); border:1px solid var(--panel-border);
+    border-radius:12px; box-shadow:0 8px 30px -12px var(--node-shadow); z-index:100; }
+  #topbar { top:14px; left:14px; right:14px; display:flex; align-items:center; gap:10px; padding:9px 13px; flex-wrap:wrap; }
+  #topbar .brand { display:flex; flex-direction:column; gap:1px; margin-right:4px; }
+  #topbar h1 { margin:0; font-size:14px; letter-spacing:-.2px; }
+  #topbar .sub { font-size:11px; color:var(--muted); }
+  #topbar .spacer { flex:1; }
+  .sep { width:1px; align-self:stretch; background:var(--panel-border); margin:2px 2px; }
+  .btn { font-family:var(--sans); font-size:12px; color:var(--ink); cursor:pointer;
+    background:var(--panel-2); border:1px solid var(--panel-border); border-radius:8px;
+    padding:6px 10px; line-height:1; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .btn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .edit-only { display:none; }
+  body.editing .edit-only { display:inline-flex; }
+  .zoomgrp { display:flex; align-items:center; gap:2px; }
+  .zoomgrp .btn { border-radius:0; padding:6px 9px; font-weight:700; }
+  .zoomgrp .btn:first-child { border-radius:8px 0 0 8px; }
+  .zoomgrp .btn:last-child { border-radius:0 8px 8px 0; }
+  #zlabel { font-family:var(--mono); font-size:11px; color:var(--muted); min-width:44px; text-align:center;
+    border-top:1px solid var(--panel-border); border-bottom:1px solid var(--panel-border); padding:6px 4px; background:var(--panel-2); }
+
+  #legend { left:14px; bottom:14px; padding:12px 14px; width:250px; font-size:11.5px; }
+  #legend h2 { margin:0 0 8px; font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; }
+  .lg-sec + .lg-sec { margin-top:11px; padding-top:10px; border-top:1px solid var(--panel-border); }
+  .lg-row { display:flex; align-items:center; gap:8px; padding:2px 0; }
+  .lg-row.tog { cursor:pointer; user-select:none; }
+  .lg-row.tog.off { opacity:.4; }
+  .lg-row .lab { color:var(--ink); } .lg-row .hint { color:var(--faint); font-size:10px; margin-left:auto; }
+  .swatch { width:22px; height:0; border-top-width:2.5px; border-top-style:solid; flex:none; }
+  .sw-fk{ border-color:var(--edge-fk); } .sw-ref{ border-color:var(--edge-ref); border-top-style:dashed; }
+  .sw-name{ border-color:var(--edge-name); border-top-style:dotted; } .sw-json{ border-color:var(--edge-json); border-top-style:dashed; }
+  .chip { width:11px; height:11px; border-radius:3px; flex:none; } .chip.clinical{ background:var(--clinical); } .chip.portal{ background:var(--portal); }
+  .dotc { width:9px; height:9px; border-radius:50%; flex:none; } .dotc.live{ background:var(--st-live);} .dotc.inert{ background:var(--st-inert);} .dotc.dead{ background:var(--st-dead);}
+
+  #hintbar { right:14px; bottom:14px; padding:8px 12px; font-size:11px; color:var(--muted); max-width:250px; }
+  #hintbar b { color:var(--ink); font-weight:600; }
+
+  #pop, #colpop { padding:9px; min-width:172px; z-index:200; }
+  .pt { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 2px 6px; font-weight:700; }
+  .pt2 { font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--faint); margin:8px 2px 5px; font-weight:700; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .kbtn { font-size:11px; padding:5px 6px; border-radius:7px; border:1px solid var(--panel-border);
+    background:var(--panel-2); color:var(--ink); cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .kbtn:hover { border-color:var(--accent); }
+  .kbtn.cur { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,transparent); }
+  .kdash { width:16px; height:0; border-top-width:2.5px; flex:none; }
+  .del { margin-top:8px; width:100%; justify-content:center; color:var(--danger); border-color:var(--danger); background:transparent; }
+  #pop[hidden], #colpop[hidden] { display:none; }
+  #colpop .cp-type { display:flex; gap:5px; }
+  #colpop select, #colpop .fld { font-family:var(--mono); font-size:11.5px; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--panel-border); border-radius:7px; padding:5px 6px; width:100%; outline:none; }
+  #colpop select:focus, #colpop .fld:focus { border-color:var(--accent); }
+  #colpop #cp-size { max-width:74px; }
+  #colpop .fgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:2px; }
+  .fbtn { font-family:var(--sans); font-size:10px; font-weight:700; cursor:pointer; padding:5px 0;
+    border-radius:6px; border:1px solid var(--panel-border); background:var(--panel-2); color:var(--muted); }
+  .fbtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #colpop .fld { margin-top:7px; }
+
+  #banner { top:70px; left:50%; transform:translateX(-50%); padding:9px 16px; z-index:150;
+    font-size:12.5px; color:var(--ink); display:flex; align-items:center; gap:12px; }
+  #banner[hidden] { display:none; } #banner b { color:var(--accent); } #banner .x { cursor:pointer; color:var(--muted); font-weight:700; }
+  #file { display:none; }
+
+  #modal { position:fixed; inset:0; z-index:500; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, #0b0f16 55%, transparent); }
+  #modal[hidden] { display:none; }
+  .mbox { padding:20px 22px; max-width:340px; width:calc(100% - 40px); }
+  .mbox p { margin:0 0 16px; font-size:13.5px; line-height:1.5; color:var(--ink); }
+  .mbtns { display:flex; justify-content:flex-end; gap:8px; }
+  .btn.danger { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .btn.danger:hover { filter:brightness(1.06); color:#fff; }
+  @media (max-width:820px){ #legend{ display:none; } #hintbar{ display:none; } #topbar .sub{ display:none; } }
+</style>
+
+<div id="canvas">
+  <svg id="edges"><defs></defs></svg>
+  <div id="world"></div>
+</div>
+
+<div id="topbar" class="panel">
+  <div class="brand">
+    <h1>Assessment App Flow</h1>
+    <span class="sub">schema editor · reverse-engineered from <span style="font-family:var(--mono)">01-schema.sql</span></span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn edit-only" id="addtable">+ Table</button>
+  <button class="btn edit-only" id="link">↔ Relationship</button>
+  <button class="btn edit-only" id="export">Export</button>
+  <button class="btn edit-only" id="import">Import</button>
+  <button class="btn edit-only" id="revert" title="Discard edits, restore original schema">Revert</button>
+  <div class="sep edit-only"></div>
+  <button class="btn" id="edit">Edit</button>
+  <button class="btn" id="fit">Fit</button>
+  <button class="btn" id="theme">Theme</button>
+  <div class="zoomgrp"><button class="btn" id="zout">−</button><span id="zlabel">100%</span><button class="btn" id="zin">+</button></div>
+  <input type="file" id="file" accept="application/json,.json">
+</div>
+
+<div id="banner" class="panel" hidden><span id="bmsg"></span><span class="x" id="bx">✕</span></div>
+
+<div id="legend" class="panel">
+  <div class="lg-sec">
+    <h2>Relationships · click to toggle</h2>
+    <div class="lg-row tog" data-kind="fk"><span class="swatch sw-fk"></span><span class="lab">Foreign key</span><span class="hint">enforced</span></div>
+    <div class="lg-row tog" data-kind="ref"><span class="swatch sw-ref"></span><span class="lab">UUID ref</span><span class="hint">no FK</span></div>
+    <div class="lg-row tog" data-kind="name"><span class="swatch sw-name"></span><span class="lab">By name</span><span class="hint">brittle</span></div>
+    <div class="lg-row tog" data-kind="json"><span class="swatch sw-json"></span><span class="lab">JSON array</span><span class="hint">fan-out</span></div>
+  </div>
+  <div class="lg-sec">
+    <h2>Subsystem</h2>
+    <div class="lg-row"><span class="chip clinical"></span><span class="lab">Clinical / IRT <span style="color:var(--faint)">char(36)</span></span></div>
+    <div class="lg-row"><span class="chip portal"></span><span class="lab">Portal / live app <span style="color:var(--faint)">varchar(64)</span></span></div>
+  </div>
+  <div class="lg-sec">
+    <h2>Status</h2>
+    <div class="lg-row"><span class="dotc live"></span><span class="lab">Live — used by the app</span></div>
+    <div class="lg-row"><span class="dotc inert"></span><span class="lab">Inert — written, never read</span></div>
+    <div class="lg-row"><span class="dotc dead"></span><span class="lab">Dead — empty / no entity</span></div>
+  </div>
+</div>
+
+<div id="hintbar" class="panel">
+  <b>Drag</b> pan · <b>Scroll</b> zoom · <b>Edit</b> to add tables, edit columns (▾), draw links · <b>Click a line</b> to set type & cardinality
+</div>
+
+<div id="pop" class="panel" hidden></div>
+<div id="colpop" class="panel" hidden>
+  <p class="pt" id="cp-title">Column</p>
+  <div class="cp-type"><select id="cp-type"></select><input id="cp-size" class="fld" placeholder="size" style="margin-top:0"></div>
+  <p class="pt2">Attributes</p>
+  <div class="fgrid" id="cp-flags"></div>
+  <input id="cp-default" class="fld" placeholder="default value (optional)">
+  <button class="btn del" id="cp-del">✕ Delete column</button>
+</div>
+
+<div id="modal" hidden>
+  <div class="mbox panel">
+    <p id="mmsg"></p>
+    <div class="mbtns"><button class="btn" id="mcancel">Cancel</button><button class="btn danger" id="mok">Confirm</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const SVGNS="http://www.w3.org/2000/svg";
+
+  // column attribute flags (letter, label, tooltip)
+  const FLAGS=[["pk","PK","Primary key"],["fk","FK","Foreign key"],["u","U","Unique"],["nn","NN","Not null"],
+               ["ai","AI","Auto-increment"],["un","UN","Unsigned"],["ix","IX","Index"],["j","JSON","JSON column"]];
+  const MYSQL_TYPES=["tinyint","smallint","mediumint","int","bigint","decimal","float","double","bit","boolean",
+    "char","varchar","tinytext","text","mediumtext","longtext","binary","varbinary","blob","enum","set",
+    "date","datetime","timestamp","time","year","json"];
+  const CARDS=[["1-1","1 – 1"],["1-m","1 – N"],["m-1","N – 1"],["m-m","N – N"]];
+  const CARDSYM={"1-1":["1","1"],"1-m":["1","N"],"m-1":["N","1"],"m-m":["N","N"]};
+  const KINDS=[["fk","Foreign key"],["ref","UUID ref"],["name","By name"],["json","JSON array"]];
+
+  const c=(n,t,f)=>Object.assign({n,t},f||{});
+  function e(from,fromCol,to,toCol,kind,card){ return {from,fromCol,to,toCol,kind,card:card||"m-1"}; }
+  const DEFAULT_MODEL = { nodes:[
+    { id:"tenants", fam:"clinical", st:"dead", ent:"— no entity", x:80, y:70, w:210, cols:[
+      c("id","char(36)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1}),c("slug","varchar(100)",{u:1,nn:1}),c("domain","varchar(255)"),
+      c("vertical","varchar(32)",{nn:1}),c("tier","varchar(8)",{nn:1}),c("is_whitelabel","tinyint"),c("branding","json",{j:1}),
+      c("status","varchar(20)",{nn:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"users", fam:"clinical", st:"dead", ent:"— no entity (JOIN-only)", x:80, y:470, w:230, cols:[
+      c("id","char(36)",{pk:1,nn:1}),c("tenant_id","char(36)",{fk:1,ix:1,nn:1}),c("email","varchar(255)",{nn:1}),c("name","varchar(255)",{nn:1}),
+      c("role","varchar(32)",{nn:1,ix:1}),c("verticals","json",{j:1}),c("primary_language","varchar(8)",{nn:1}),c("is_active","tinyint",{nn:1}),
+      c("last_login","timestamp"),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"instruments", fam:"clinical", st:"live", ent:"QuestionnaireCatalog · dead entity, native SQL", x:430, y:250, w:250, cols:[
+      c("id","char(36)",{pk:1,nn:1}),c("tenant_id","char(36)",{fk:1,ix:1}),c("name","varchar(255)",{nn:1}),c("short_name","varchar(50)"),
+      c("vertical","varchar(32)",{nn:1,ix:1}),c("category","varchar(100)"),c("description","text"),c("item_count","int",{nn:1}),
+      c("duration_minutes","int"),c("languages","json",{j:1}),c("tier_required","varchar(8)",{nn:1}),c("is_adaptive","tinyint",{nn:1}),
+      c("is_fixed_sequence","tinyint",{nn:1}),c("norm_status","varchar(50)",{nn:1}),c("age_range","varchar(20)"),c("informant_types","json",{j:1}),
+      c("scoring_algorithm","varchar(50)",{nn:1}),c("metadata","json",{j:1}),c("is_published","tinyint",{nn:1}),c("uses_weighted_scoring","tinyint",{nn:1}),
+      c("scoring_config","json",{j:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"items", fam:"clinical", st:"inert", ent:"Item · dead entity, native SQL", x:430, y:830, w:240, cols:[
+      c("id","char(36)",{pk:1,nn:1}),c("instrument_id","char(36)",{fk:1,ix:1,nn:1}),c("vertical","varchar(32)",{nn:1}),c("sub_domain","varchar(100)"),
+      c("sub_domains","json",{j:1}),c("item_format","varchar(32)",{nn:1}),c("stem","text",{nn:1}),c("media_url","text"),c("media_type","varchar(20)"),
+      c("options","json",{j:1}),c("irt_a","double"),c("irt_b","double"),c("irt_c","double",{nn:1}),c("languages","json",{j:1}),
+      c("norm_group","json",{j:1}),c("validation_status","varchar(20)",{nn:1}),c("clinical_risk_flag","tinyint",{nn:1}),c("risk_flag_rule","text"),
+      c("sequence_order","int"),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"sessions", fam:"clinical", st:"dead", ent:"Session · dead entity, native SQL", x:820, y:250, w:250, cols:[
+      c("id","char(36)",{pk:1,nn:1}),c("tenant_id","char(36)",{fk:1,ix:1,nn:1}),c("practitioner_id","char(36)",{ix:1,nn:1}),c("respondent_id","char(36)",{ix:1,nn:1}),
+      c("instrument_id","char(36)",{fk:1,nn:1}),c("consent_id","char(36)"),c("vertical","varchar(32)",{nn:1,ix:1}),c("language","varchar(8)",{nn:1}),
+      c("status","varchar(20)",{nn:1,ix:1}),c("is_proctored","tinyint",{nn:1}),c("proctor_status","varchar(20)"),c("trust_score","double"),
+      c("current_item_index","int",{nn:1}),c("theta_estimate","double",{nn:1}),c("theta_sem","double"),c("started_at","timestamp"),
+      c("completed_at","timestamp"),c("time_limit_minutes","int"),c("last_auto_save","timestamp"),c("invitation_sent_at","timestamp"),
+      c("invitation_method","varchar(20)"),c("metadata","json",{j:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"published_questionnaires", fam:"portal", st:"live", ent:"PublishedQuestionnaire", x:1180, y:70, w:255, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1,ix:1}),c("short_name","varchar(255)",{ix:1}),c("vertical","varchar(64)"),
+      c("category","varchar(255)"),c("description","text"),c("duration","int"),c("tier","varchar(32)"),c("languages","json",{j:1,nn:1}),
+      c("mqs","json",{j:1}),c("questions","json",{j:1}),c("is_demo","tinyint",{nn:1}),c("disclaimer","text"),
+      c("demographic_field_keys","json",{j:1,nn:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"portal_sessions", fam:"portal", st:"live", ent:"PortalSession · the “assessment”", x:1560, y:430, w:265, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)"),c("respondent_id","varchar(64)",{ix:1,nn:1}),c("respondent_name","varchar(255)",{nn:1}),
+      c("respondent_email","varchar(255)"),c("instrument","varchar(255)",{nn:1}),c("instrument_full_name","varchar(255)"),
+      c("vertical","varchar(64)"),c("language","varchar(64)",{nn:1}),c("status","varchar(32)",{nn:1,ix:1}),c("score","varchar(255)"),
+      c("answers","json",{j:1}),c("mqt_scores","json",{j:1}),c("demographics","json",{j:1}),c("group_id","varchar(64)"),
+      c("group_name","varchar(255)"),c("consent_id","varchar(64)"),c("proctoring","tinyint",{nn:1}),c("invitation_sent","tinyint",{nn:1}),
+      c("show_question_index","tinyint",{nn:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}),c("completed_at","timestamp"),
+      c("started_at","timestamp") ]},
+    { id:"respondents", fam:"portal", st:"live", ent:"Respondent", x:1980, y:250, w:230, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1}),c("email","varchar(255)",{u:1,nn:1}),c("phone","varchar(64)"),
+      c("dob","varchar(16)"),c("consent","varchar(32)",{nn:1}),c("sessions_count","int",{nn:1}),c("last_assessment","varchar(255)"),
+      c("account_type","varchar(32)",{nn:1}),c("org_name","varchar(255)"),c("org_website","varchar(512)"),
+      c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"respondent_groups", fam:"portal", st:"live", ent:"RespondentGroup", x:1980, y:760, w:245, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1}),c("description","text"),c("parent_id","varchar(64)",{fk:1,ix:1}),
+      c("member_ids","json",{j:1,nn:1}),c("assigned_instruments","json",{j:1,nn:1}),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"practitioners", fam:"portal", st:"live", ent:"Practitioner", x:2320, y:70, w:225, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1}),c("email","varchar(255)",{u:1,nn:1}),c("phone","varchar(32)"),
+      c("roles","json",{j:1,nn:1}),c("verticals","json",{j:1,nn:1}),c("status","varchar(32)",{nn:1}),c("last_login","varchar(32)"),
+      c("dob","date"),c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"roles", fam:"portal", st:"live", ent:"Role", x:2320, y:470, w:215, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{nn:1,ix:1}),c("description","text"),c("url_paths","json",{j:1,nn:1}),
+      c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"measured_qualities", fam:"portal", st:"live", ent:"MeasuredQuality · recursive MQT tree", x:820, y:760, w:230, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("name","varchar(255)",{u:1,nn:1}),c("description","text"),c("mqts","json",{j:1,nn:1}),
+      c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+    { id:"demographic_fields", fam:"portal", st:"live", ent:"DemographicField", x:1180, y:640, w:225, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("field_key","varchar(128)",{nn:1}),c("label","varchar(255)",{nn:1}),c("type","varchar(32)",{nn:1}),
+      c("required","tinyint",{nn:1}),c("placeholder","varchar(255)"),c("options","json",{j:1}),c("sort_order","int",{nn:1}),c("active","tinyint",{nn:1}) ]},
+    { id:"item_display_state", fam:"portal", st:"live", ent:"ItemDisplayState", x:430, y:1310, w:220, cols:[
+      c("item_id","varchar(64)",{pk:1,nn:1}),c("override","json",{j:1}),c("deleted","tinyint",{nn:1}) ]},
+    { id:"verticals", fam:"portal", st:"live", ent:"Vertical", x:2320, y:790, w:210, cols:[
+      c("id","varchar(64)",{pk:1,nn:1}),c("code","varchar(64)",{u:1,nn:1,ix:1}),c("name","varchar(255)",{nn:1}),c("description","text"),
+      c("created_at","timestamp",{nn:1}),c("updated_at","timestamp",{nn:1}) ]},
+  ], edges:[
+    e("users","tenant_id","tenants","id","fk","m-1"), e("instruments","tenant_id","tenants","id","fk","m-1"),
+    e("items","instrument_id","instruments","id","fk","m-1"), e("sessions","tenant_id","tenants","id","fk","m-1"),
+    e("sessions","instrument_id","instruments","id","fk","m-1"), e("respondent_groups","parent_id","respondent_groups","id","fk","m-1"),
+    e("sessions","practitioner_id","users","id","ref","m-1"), e("sessions","respondent_id","users","id","ref","m-1"),
+    e("portal_sessions","respondent_id","respondents","id","ref","m-1"), e("portal_sessions","group_id","respondent_groups","id","ref","m-1"),
+    e("item_display_state","item_id","items","id","ref","1-1"),
+    e("portal_sessions","instrument","published_questionnaires","name","name","m-1"),
+    e("portal_sessions","instrument","instruments","name","name","m-1"),
+    e("practitioners","roles","roles","name","json","m-m"), e("respondent_groups","member_ids","respondents","id","json","m-m"),
+    e("respondent_groups","assigned_instruments","instruments","id","json","m-m"),
+    e("published_questionnaires","demographic_field_keys","demographic_fields","field_key","json","m-m"),
+    e("published_questionnaires","mqs","measured_qualities","id","json","m-m"),
+  ]};
+
+  // ---- state ----------------------------------------------------------
+  const LS_KEY="aaf-schema-v2";
+  const canvas=document.getElementById("canvas"), world=document.getElementById("world"),
+        svg=document.getElementById("edges"), pop=document.getElementById("pop"), colpop=document.getElementById("colpop"),
+        banner=document.getElementById("banner"), bmsg=document.getElementById("bmsg");
+  let zoom=1, panX=0, panY=0, seq=1, editing=false, linkMode=false, linkSrc=null, selEdge=null, colCtx=null;
+  const geom={}; const hiddenKinds=new Set(); let edgeEls=[]; const adj={};
+  let model=load();
+
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  function load(){ let m=null; try{ const s=localStorage.getItem(LS_KEY); if(s) m=JSON.parse(s);}catch(_){}
+    if(!m) m=clone(DEFAULT_MODEL); normalize(m); return m; }
+  function normalize(m){ m.nodes.forEach(n=>{ if(n.name==null)n.name=n.id; if(n.h==null)n.h=0;
+      n.cols.forEach(col=>{ if(!col.id) col.id="c"+(seq++); }); });
+    m.edges.forEach(ed=>{ if(!ed.id)ed.id="e"+(seq++); if(!ed.card)ed.card="m-1"; }); }
+  function save(){ try{ localStorage.setItem(LS_KEY,JSON.stringify(model)); }catch(_){} }
+  const nodeById=id=>model.nodes.find(n=>n.id===id), edgeById=id=>model.edges.find(x=>x.id===id);
+  const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+  // ---- render nodes ---------------------------------------------------
+  function badges(col){ return FLAGS.filter(f=>col[f[0]]).map(f=>'<span class="tag t-'+f[0]+'" title="'+f[2]+'">'+f[1]+'</span>').join(""); }
+  function colHtml(col){ return '<div class="col'+(col.pk?' pk':'')+'" data-col="'+col.id+'">'
+      +'<span class="cn editable" data-f="cn">'+esc(col.n)+'</span>'
+      +'<span class="badges">'+badges(col)+'</span>'
+      +'<span class="ct">'+esc(col.t)+(col.def?' <span class="cdef">='+esc(col.def)+'</span>':'')+'</span>'
+      +'<button class="coledit" data-act="coledit" title="edit column type & attributes">▾</button>'
+    +'</div>'; }
+  function nodeHtml(n){ return '<div class="node-head" data-role="head"><div class="th-row">'
+      +'<span class="tname editable" data-f="name">'+esc(n.name)+'</span>'
+      +'<span class="status '+n.st+' st-view">'+n.st+'</span>'
+      +'<span class="hd-tools"><button data-act="fam" title="toggle subsystem">'+(n.fam==="portal"?"P":"C")+'</button>'
+      +'<button class="status '+n.st+'" data-act="status" title="cycle status">'+n.st+'</button>'
+      +'<button class="del" data-act="delnode" title="delete table">🗑</button></span></div>'
+      +'<div class="ent editable" data-f="ent">'+esc(n.ent||"")+'</div></div>'
+    +'<div class="cols">'+n.cols.map(colHtml).join("")+'<button class="addcol" data-act="addcol">+ column</button></div>'
+    +'<div class="rz" data-role="resize"></div>'; }
+  function renderNodes(){ world.innerHTML="";
+    for(const n of model.nodes){ const el=document.createElement("div");
+      el.className="node "+n.fam; el.dataset.id=n.id; el.style.left=n.x+"px"; el.style.top=n.y+"px"; el.style.width=n.w+"px";
+      if(n.h) el.style.height=n.h+"px"; el.innerHTML=nodeHtml(n); world.appendChild(el); geom[n.id]={el}; }
+    applyEditableState(); }
+  function renderOneNode(id){ const el=geom[id]&&geom[id].el; if(!el) return; el.innerHTML=nodeHtml(nodeById(id)); applyEditableState(); }
+  function applyEditableState(){ document.querySelectorAll(".editable").forEach(s=>s.contentEditable=editing?"true":"false"); }
+
+  // ---- edges ----------------------------------------------------------
+  const defs=svg.querySelector("defs");
+  for(const k of ["fk","ref","name","json"]){ const m=document.createElementNS(SVGNS,"marker");
+    m.id="ar-"+k; m.setAttribute("viewBox","0 0 10 10"); m.setAttribute("refX","8.5"); m.setAttribute("refY","5");
+    m.setAttribute("markerWidth","7"); m.setAttribute("markerHeight","7"); m.setAttribute("orient","auto-start-reverse");
+    const p=document.createElementNS(SVGNS,"path"); p.setAttribute("d","M0 1 L9 5 L0 9 z"); p.setAttribute("fill","var(--edge-"+k+")");
+    m.appendChild(p); defs.appendChild(m); }
+  function mkText(){ const t=document.createElementNS(SVGNS,"text"); t.setAttribute("class","elabel"); svg.appendChild(t); return t; }
+  function buildEdges(){ [...svg.querySelectorAll(".edge,.ehit,.elabel")].forEach(n=>n.remove());
+    model.nodes.forEach(n=>adj[n.id]=new Set());
+    edgeEls=model.edges.map(ed=>{ const hit=document.createElementNS(SVGNS,"path"); hit.setAttribute("class","ehit"); hit.dataset.id=ed.id; svg.appendChild(hit);
+      const vis=document.createElementNS(SVGNS,"path"); vis.setAttribute("class","edge edge-"+ed.kind); vis.setAttribute("marker-end","url(#ar-"+ed.kind+")"); vis.dataset.id=ed.id; svg.appendChild(vis);
+      const l1=mkText(), l2=mkText();
+      if(adj[ed.from]) adj[ed.from].add(ed.to); if(adj[ed.to]) adj[ed.to].add(ed.from);
+      return {e:ed,vis,hit,l1,l2}; }); }
+  const w2s=(x,y)=>({x:x*zoom+panX,y:y*zoom+panY});
+  function nodeRect(id){ const n=nodeById(id), el=geom[id]&&geom[id].el; if(!n||!el) return null; return {x:n.x,y:n.y,w:el.offsetWidth,h:el.offsetHeight}; }
+  function border(r,tx,ty){ const cx=r.x+r.w/2, cy=r.y+r.h/2, dx=tx-cx, dy=ty-cy; if(dx===0&&dy===0) return {x:cx,y:cy};
+    const s=Math.min(dx!==0?(r.w/2)/Math.abs(dx):Infinity, dy!==0?(r.h/2)/Math.abs(dy):Infinity); return {x:cx+dx*s,y:cy+dy*s}; }
+  function placeLabel(t,x,y,s,hide){ if(hide||!s){ t.style.display="none"; return; } t.style.display=""; t.setAttribute("x",x); t.setAttribute("y",y); t.textContent=s; }
+  function renderEdges(){ const W=canvas.clientWidth, H=canvas.clientHeight;
+    svg.setAttribute("viewBox","0 0 "+W+" "+H); svg.setAttribute("width",W); svg.setAttribute("height",H);
+    for(const it of edgeEls){ const ed=it.e, hide=hiddenKinds.has(ed.kind);
+      it.vis.classList.toggle("hidden",hide); it.hit.classList.toggle("hidden",hide);
+      const sym=CARDSYM[ed.card]||["",""];
+      if(hide){ placeLabel(it.l1,0,0,"",true); placeLabel(it.l2,0,0,"",true); continue; }
+      it.vis.setAttribute("class","edge edge-"+ed.kind+(selEdge===ed.id?" sel":"")+(it.vis.classList.contains("hi")?" hi":""));
+      it.vis.setAttribute("marker-end","url(#ar-"+ed.kind+")");
+      const ra=nodeRect(ed.from); if(!ra) continue;
+      if(ed.from===ed.to){ const p1=w2s(ra.x+ra.w,ra.y+22), p2=w2s(ra.x+ra.w,ra.y-4), b=46;
+        const d="M"+p1.x+" "+p1.y+" C "+(p1.x+b)+" "+p1.y+" "+(p2.x+b)+" "+p2.y+" "+p2.x+" "+p2.y;
+        it.vis.setAttribute("d",d); it.hit.setAttribute("d",d);
+        placeLabel(it.l1,p1.x+13,p1.y,sym[0]); placeLabel(it.l2,p2.x+13,p2.y,sym[1]); continue; }
+      const rb=nodeRect(ed.to); if(!rb) continue;
+      const ca={x:ra.x+ra.w/2,y:ra.y+ra.h/2}, cb={x:rb.x+rb.w/2,y:rb.y+rb.h/2};
+      const a=border(ra,cb.x,cb.y), bb=border(rb,ca.x,ca.y), A=w2s(a.x,a.y), B=w2s(bb.x,bb.y);
+      const mx=(A.x+B.x)/2, my=(A.y+B.y)/2, dx=B.x-A.x, dy=B.y-A.y, len=Math.hypot(dx,dy)||1;
+      const cv=Math.min(len*0.10,26), nx=-dy/len*cv, ny=dx/len*cv, ux=dx/len, uy=dy/len;
+      const d="M"+A.x+" "+A.y+" Q "+(mx+nx)+" "+(my+ny)+" "+B.x+" "+B.y;
+      it.vis.setAttribute("d",d); it.hit.setAttribute("d",d);
+      placeLabel(it.l1, A.x+ux*15-uy*7, A.y+uy*15+ux*7, sym[0]);
+      placeLabel(it.l2, B.x-ux*17-uy*7, B.y-uy*17+ux*7, sym[1]);
+    } }
+  const applyWorld=()=>{ world.style.transform="translate("+panX+"px,"+panY+"px) scale("+zoom+")"; document.getElementById("zlabel").textContent=Math.round(zoom*100)+"%"; };
+  const render=()=>{ applyWorld(); renderEdges(); };
+  const rebuild=()=>{ renderNodes(); buildEdges(); renderEdges(); save(); };
+
+  // ---- fit / zoom -----------------------------------------------------
+  function fit(pad){ pad=pad==null?70:pad; let mnX=1e9,mnY=1e9,mxX=-1e9,mxY=-1e9;
+    for(const n of model.nodes){ const r=nodeRect(n.id); if(!r)continue; mnX=Math.min(mnX,r.x); mnY=Math.min(mnY,r.y); mxX=Math.max(mxX,r.x+r.w); mxY=Math.max(mxY,r.y+r.h); }
+    if(mnX>mxX){ zoom=1; panX=40; panY=40; return render(); }
+    const W=canvas.clientWidth,H=canvas.clientHeight, bw=mxX-mnX, bh=mxY-mnY;
+    zoom=Math.max(0.12,Math.min((W-pad*2)/bw,(H-pad*2)/bh,1.15));
+    panX=(W-bw*zoom)/2-mnX*zoom; panY=(H-bh*zoom)/2-mnY*zoom+18; render(); }
+  function zoomAt(cx,cy,f){ const nz=Math.min(2.4,Math.max(0.1,zoom*f)); const wx=(cx-panX)/zoom, wy=(cy-panY)/zoom; zoom=nz; panX=cx-wx*zoom; panY=cy-wy*zoom; render(); }
+  canvas.addEventListener("wheel",ev=>{ ev.preventDefault(); const r=canvas.getBoundingClientRect(); zoomAt(ev.clientX-r.left,ev.clientY-r.top,ev.deltaY<0?1.12:1/1.12); },{passive:false});
+
+  // ---- pointer: pan / drag / resize -----------------------------------
+  let mode=null, active=null, start=null, zt=20; const front=el=>{ el.style.zIndex=++zt; };
+  canvas.addEventListener("pointerdown",ev=>{
+    if(ev.target.closest('[contenteditable="true"]')) return;
+    if(ev.target.closest('[data-act]')) return;
+    if(editing && ev.target.closest('.ehit')) return;
+    const node=ev.target.closest(".node"); if(linkMode){ if(node) return; }
+    const rz=ev.target.closest('[data-role="resize"]'), head=ev.target.closest('[data-role="head"]');
+    if(rz&&node){ mode="resize"; active=node; start={mx:ev.clientX,my:ev.clientY,w:node.offsetWidth,h:node.offsetHeight}; node.style.height=node.offsetHeight+"px"; front(node); }
+    else if(head&&node){ mode="drag"; active=node; const n=nodeById(node.dataset.id); start={mx:ev.clientX,my:ev.clientY,x:n.x,y:n.y}; front(node); node.classList.add("sel"); }
+    else { mode="pan"; start={mx:ev.clientX,my:ev.clientY,px:panX,py:panY}; canvas.classList.add("panning"); }
+    canvas.setPointerCapture(ev.pointerId); });
+  canvas.addEventListener("pointermove",ev=>{ if(!mode) return;
+    if(mode==="pan"){ panX=start.px+(ev.clientX-start.mx); panY=start.py+(ev.clientY-start.my); render(); }
+    else if(mode==="drag"){ const n=nodeById(active.dataset.id); n.x=start.x+(ev.clientX-start.mx)/zoom; n.y=start.y+(ev.clientY-start.my)/zoom; active.style.left=n.x+"px"; active.style.top=n.y+"px"; renderEdges(); }
+    else if(mode==="resize"){ const n=nodeById(active.dataset.id); n.w=Math.max(200,start.w+(ev.clientX-start.mx)/zoom); n.h=Math.max(60,start.h+(ev.clientY-start.my)/zoom); active.style.width=n.w+"px"; active.style.height=n.h+"px"; renderEdges(); } });
+  function endPtr(){ if(mode==="drag"&&active) active.classList.remove("sel"); if(mode==="drag"||mode==="resize") save(); mode=null; active=null; canvas.classList.remove("panning"); }
+  canvas.addEventListener("pointerup",endPtr); canvas.addEventListener("pointercancel",endPtr);
+
+  // ---- hover trace ----------------------------------------------------
+  world.addEventListener("pointerover",ev=>{ if(mode||linkMode) return; const node=ev.target.closest(".node"); if(!node) return; const id=node.dataset.id;
+    canvas.classList.add("focus"); document.querySelectorAll(".node").forEach(nd=>nd.classList.toggle("hi", nd.dataset.id===id||(adj[id]&&adj[id].has(nd.dataset.id))));
+    for(const it of edgeEls) it.vis.classList.toggle("hi", it.e.from===id||it.e.to===id); });
+  world.addEventListener("pointerout",ev=>{ if(mode||linkMode) return; const to=ev.relatedTarget; if(to&&to.closest&&to.closest(".node")) return; canvas.classList.remove("focus"); for(const it of edgeEls) it.vis.classList.remove("hi"); });
+
+  // ---- text commits + button actions ----------------------------------
+  world.addEventListener("input",ev=>{ const f=ev.target.closest(".editable"); if(!f) return;
+    const n=nodeById(ev.target.closest(".node").dataset.id), field=f.dataset.f, txt=f.textContent;
+    if(field==="name") n.name=txt; else if(field==="ent") n.ent=txt;
+    else { const col=n.cols.find(x=>x.id===ev.target.closest(".col").dataset.col); if(col&&field==="cn") col.n=txt; }
+    renderEdges(); save(); });
+  world.addEventListener("click",ev=>{
+    if(linkMode){ const node=ev.target.closest(".node"); if(node && !ev.target.closest('[data-act],[contenteditable="true"]')){ linkPick(node.dataset.id, ev.clientX, ev.clientY); return; } }
+    const act=ev.target.closest("[data-act]"); if(!act) return;
+    const n=nodeById(ev.target.closest(".node").dataset.id), a=act.dataset.act;
+    if(a==="fam"){ n.fam=n.fam==="portal"?"clinical":"portal"; rebuild(); }
+    else if(a==="status"){ n.st=n.st==="live"?"inert":n.st==="inert"?"dead":"live"; rebuild(); }
+    else if(a==="delnode"){ askConfirm('Delete table "'+n.name+'" and its relationships?','Delete table',()=>{
+        model.nodes=model.nodes.filter(x=>x!==n); model.edges=model.edges.filter(x=>x.from!==n.id&&x.to!==n.id); rebuild(); }); }
+    else if(a==="addcol"){ n.cols.push({id:"c"+(seq++),n:"new_column",t:"varchar(255)"}); rebuild();
+        const el=geom[n.id].el.querySelector('.col:nth-last-child(2) .cn'); if(el){ el.focus(); document.getSelection().selectAllChildren(el); } }
+    else if(a==="coledit"){ openColPop(n.id, ev.target.closest(".col").dataset.col, ev.clientX, ev.clientY); }
+  });
+
+  // ---- column popover -------------------------------------------------
+  const cpType=document.getElementById("cp-type"), cpSize=document.getElementById("cp-size"),
+        cpFlags=document.getElementById("cp-flags"), cpDefault=document.getElementById("cp-default"),
+        cpTitle=document.getElementById("cp-title"), cpDel=document.getElementById("cp-del");
+  cpType.innerHTML=MYSQL_TYPES.map(t=>'<option value="'+t+'">'+t+'</option>').join("");
+  cpFlags.innerHTML=FLAGS.map(f=>'<button class="fbtn" data-flag="'+f[0]+'" title="'+f[2]+'">'+f[1]+'</button>').join("");
+  function curCol(){ if(!colCtx) return null; const n=nodeById(colCtx.node); return n&&n.cols.find(x=>x.id===colCtx.col); }
+  function parseType(t){ const m=String(t||"").match(/^([a-z]+)\s*(?:\(([^)]*)\))?/i); return {base:m?m[1].toLowerCase():"varchar", size:m&&m[2]?m[2]:""}; }
+  function openColPop(nodeId,colId,cx,cy){ colCtx={node:nodeId,col:colId}; const col=curCol(); if(!col) return;
+    cpTitle.textContent=col.n; const p=parseType(col.t);
+    cpType.value=MYSQL_TYPES.includes(p.base)?p.base:"varchar"; cpSize.value=p.size; cpDefault.value=col.def||"";
+    cpFlags.querySelectorAll(".fbtn").forEach(b=>b.classList.toggle("on", !!col[b.dataset.flag]));
+    pop.hidden=true; colpop.hidden=false; positionPanel(colpop,cx,cy,300); }
+  function applyType(){ const col=curCol(); if(!col) return; const base=cpType.value, size=cpSize.value.trim();
+    col.t=base+(size?"("+size+")":""); renderOneNode(colCtx.node); renderEdges(); save(); }
+  cpType.addEventListener("change",applyType); cpSize.addEventListener("input",applyType);
+  cpDefault.addEventListener("input",()=>{ const col=curCol(); if(!col) return; col.def=cpDefault.value.trim()||undefined; renderOneNode(colCtx.node); save(); });
+  cpFlags.addEventListener("click",ev=>{ const b=ev.target.closest(".fbtn"); if(!b) return; const col=curCol(); if(!col) return;
+    const fl=b.dataset.flag; col[fl]=col[fl]?undefined:1; b.classList.toggle("on",!!col[fl]); renderOneNode(colCtx.node); renderEdges(); save(); });
+  cpDel.addEventListener("click",()=>{ const col=curCol(); if(!col) return; const n=nodeById(colCtx.node);
+    n.cols=n.cols.filter(x=>x.id!==col.id); colpop.hidden=true; colCtx=null; rebuild(); });
+
+  // ---- relationships --------------------------------------------------
+  function setLink(on){ linkMode=on; linkSrc=null; document.body.classList.toggle("linking",on);
+    document.getElementById("link").classList.toggle("on",on); document.querySelectorAll(".linksrc").forEach(x=>x.classList.remove("linksrc"));
+    if(on) showBanner('<b>Link mode:</b> click the source table, then the target table.'); else hideBanner(); }
+  function linkPick(id,cx,cy){ if(!linkSrc){ linkSrc=id; const el=geom[id]&&geom[id].el; if(el) el.classList.add("linksrc"); return; }
+    const srcEl=geom[linkSrc]&&geom[linkSrc].el; if(srcEl) srcEl.classList.remove("linksrc");
+    const ed={id:"e"+(seq++), from:linkSrc, to:id, fromCol:pkOf(linkSrc), toCol:pkOf(id), kind:"ref", card:"m-1"};
+    model.edges.push(ed); setLink(false); rebuild(); showEdgeMenu(ed.id,cx,cy,true); }
+  const pkOf=id=>{ const n=nodeById(id), p=n&&n.cols.find(x=>x.pk); return p?p.n:(n&&n.cols[0]?n.cols[0].n:""); };
+
+  let lastPop={x:0,y:0};
+  function positionPanel(el,cx,cy,h){ el.hidden=false; const r=canvas.getBoundingClientRect();
+    let x=Math.min(cx-r.left+8, r.width-el.offsetWidth-8), y=Math.min(cy-r.top+8, r.height-(h||el.offsetHeight)-8);
+    el.style.left=Math.max(8,x)+"px"; el.style.top=Math.max(8,y)+"px"; }
+  function showEdgeMenu(edId,cx,cy,isNew){ if(cx!=null) lastPop={x:cx,y:cy}; const ed=edgeById(edId); if(!ed) return; selEdge=edId; renderEdges();
+    colpop.hidden=true;
+    pop.innerHTML='<p class="pt">'+(isNew?"New link · ":"")+esc(nodeById(ed.from).name)+' → '+esc(nodeById(ed.to).name)+'</p>'
+      +'<p class="pt2">Type</p><div class="grid2">'+KINDS.map(k=>'<button class="kbtn'+(k[0]===ed.kind?" cur":"")+'" data-k="'+k[0]+'"><span class="kdash sw-'+k[0]+'"></span>'+k[1]+'</button>').join("")+'</div>'
+      +'<p class="pt2">Cardinality</p><div class="grid2">'+CARDS.map(cd=>'<button class="kbtn'+(cd[0]===ed.card?" cur":"")+'" data-card="'+cd[0]+'">'+cd[1]+'</button>').join("")+'</div>'
+      +'<button class="btn del" data-del="1">✕ Delete relationship</button>';
+    positionPanel(pop,lastPop.x,lastPop.y,220); }
+  pop.addEventListener("click",ev=>{ const kb=ev.target.closest("[data-k]"), cb=ev.target.closest("[data-card]"), db=ev.target.closest("[data-del]"); const ed=edgeById(selEdge); if(!ed) return;
+    if(kb){ ed.kind=kb.dataset.k; rebuild(); showEdgeMenu(ed.id); }
+    else if(cb){ ed.card=cb.dataset.card; renderEdges(); save(); showEdgeMenu(ed.id); }
+    else if(db){ model.edges=model.edges.filter(x=>x.id!==selEdge); selEdge=null; pop.hidden=true; rebuild(); } });
+  function hidePop(){ pop.hidden=true; if(selEdge){ selEdge=null; renderEdges(); } }
+  svg.addEventListener("click",ev=>{ if(!editing) return; const hit=ev.target.closest(".ehit"); if(!hit) return; showEdgeMenu(hit.dataset.id, ev.clientX, ev.clientY); });
+  document.addEventListener("pointerdown",ev=>{
+    if(!pop.hidden && !ev.target.closest("#pop") && !ev.target.closest(".ehit")) hidePop();
+    if(!colpop.hidden && !ev.target.closest("#colpop") && !ev.target.closest(".coledit")) colpop.hidden=true;
+  },true);
+
+  function showBanner(html){ bmsg.innerHTML=html; banner.hidden=false; } function hideBanner(){ banner.hidden=true; }
+  document.getElementById("bx").onclick=()=>{ if(linkMode) setLink(false); else hideBanner(); };
+
+  // ---- custom confirm (native confirm blocked in sandbox) -------------
+  const modal=document.getElementById("modal"), mmsg=document.getElementById("mmsg"), mok=document.getElementById("mok"), mcancel=document.getElementById("mcancel");
+  let modalCb=null;
+  function askConfirm(msg,okLabel,cb){ mmsg.textContent=msg; mok.textContent=okLabel||"Confirm"; modalCb=cb; modal.hidden=false; }
+  function closeModal(run){ modal.hidden=true; const cb=modalCb; modalCb=null; if(run&&cb) cb(); }
+  mok.onclick=()=>closeModal(true); mcancel.onclick=()=>closeModal(false);
+  modal.addEventListener("pointerdown",ev=>{ if(ev.target===modal) closeModal(false); });
+
+  // ---- legend toggles -------------------------------------------------
+  document.querySelectorAll(".lg-row.tog").forEach(row=>row.addEventListener("click",()=>{ const k=row.dataset.kind;
+    if(hiddenKinds.has(k)){ hiddenKinds.delete(k); row.classList.remove("off"); } else { hiddenKinds.add(k); row.classList.add("off"); } renderEdges(); }));
+
+  // ---- toolbar --------------------------------------------------------
+  function setEditing(on){ editing=on; document.body.classList.toggle("editing",on);
+    const b=document.getElementById("edit"); b.classList.toggle("on",on); b.textContent=on?"Done":"Edit";
+    if(!on){ if(linkMode) setLink(false); hidePop(); colpop.hidden=true; } applyEditableState(); }
+  document.getElementById("edit").onclick=()=>setEditing(!editing);
+  document.getElementById("addtable").onclick=()=>{ if(!editing) setEditing(true);
+    const W=canvas.clientWidth,H=canvas.clientHeight, wx=(W/2-panX)/zoom-110, wy=(H/2-panY)/zoom-40, id="tbl_"+(seq++);
+    model.nodes.push({id, name:"new_table", fam:"portal", st:"live", ent:"new entity", x:Math.round(wx), y:Math.round(wy), w:220, h:0, cols:[{id:"c"+(seq++),n:"id",t:"varchar(64)",pk:1,nn:1}]});
+    rebuild(); const el=geom[id].el; front(el); const t=el.querySelector(".tname"); if(t){ t.focus(); document.getSelection().selectAllChildren(t); } };
+  document.getElementById("link").onclick=()=>{ if(!editing) setEditing(true); setLink(!linkMode); };
+  document.getElementById("fit").onclick=()=>fit();
+  document.getElementById("zin").onclick=()=>{ const r=canvas.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1.15); };
+  document.getElementById("zout").onclick=()=>{ const r=canvas.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1/1.15); };
+  document.getElementById("theme").onclick=()=>{ const cur=document.documentElement.getAttribute("data-theme"); const dark=cur?cur==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme",dark?"light":"dark"); renderEdges(); };
+  document.getElementById("revert").onclick=()=>askConfirm("Discard all your edits and restore the original schema?","Revert",()=>{
+    try{ localStorage.removeItem(LS_KEY); }catch(_){} model=clone(DEFAULT_MODEL); normalize(model); rebuild(); fit(); });
+  document.getElementById("export").onclick=()=>{ const blob=new Blob([JSON.stringify(model,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob), a=document.createElement("a"); a.href=url; a.download="assessment-app-schema.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),2000); };
+  const fileInput=document.getElementById("file"); document.getElementById("import").onclick=()=>fileInput.click();
+  fileInput.onchange=()=>{ const f=fileInput.files[0]; if(!f) return; const rd=new FileReader();
+    rd.onload=()=>{ try{ const m=JSON.parse(rd.result); if(!m.nodes||!m.edges) throw 0; model=m; normalize(model); rebuild(); fit(); }
+      catch(_){ showBanner("That file isn’t a valid schema export."); } fileInput.value=""; }; rd.readAsText(f); };
+
+  window.addEventListener("resize",renderEdges);
+  window.addEventListener("keydown",ev=>{ if(ev.key==="Escape"){ if(linkMode) setLink(false); else if(!colpop.hidden) colpop.hidden=true; else hidePop(); } });
+
+  renderNodes(); buildEdges(); requestAnimationFrame(()=>fit());
+})();
+</script>
