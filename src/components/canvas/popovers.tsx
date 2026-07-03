@@ -39,7 +39,7 @@ function ColumnMenu({ s }: { s: Extract<PopState, { kind: 'colmenu' }> }) {
   const col = t?.columns.find(x => x.id === s.columnId);
   if (!content || !t || !col) { return null; }
   const badges = columnBadges(t).get(col.id) ?? [];
-  const toggles: Array<[string, boolean, () => typeof content, boolean]> = [
+  const toggles: Array<[string, boolean, () => import('@/lib/schema/types').WorkspaceContent, boolean]> = [
     ['PK', badges.includes('PK'), () => togglePk(content, s.tableId, s.columnId), true],
     ['NN', badges.includes('NN'), () => toggleNotNull(content, s.tableId, s.columnId), true],
     ['UQ', badges.includes('UQ'), () => toggleUnique(content, s.tableId, s.columnId), true],
