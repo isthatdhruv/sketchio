@@ -16,6 +16,8 @@ type Ast = any;
 
 const arr = (x: unknown): Ast[] => (Array.isArray(x) ? x : x == null ? [] : [x]);
 const head = (s: string) => s.slice(0, 60).replace(/\s+/g, ' ');
+/** node-sql-parser returns quoted-string values raw (escapes intact) — undo '' and \\ */
+const unesc = (s: string) => s.replace(/''/g, "'").replace(/\\\\/g, '\\');
 
 interface PendingFk {
   childTable: string; name?: string; columns: string[];
@@ -59,14 +61,14 @@ export function parseDDL(sql: string): { content: WorkspaceContent; issues: Pars
     } else if (spec?.params === 'fsp') {
       if (d.length != null) col.type.fsp = d.length;
     } else if (d.length != null) col.type.length = d.length;
-    if (spec?.params === 'values') col.type.values = arr(d.expr?.value).map((v: Ast) => String(v.value));
+    if (spec?.params === 'values') col.type.values = arr(d.expr?.value).map((v: Ast) => unesc(String(v.value)));
     const suffix: string[] = arr(d.suffix).map((s: Ast) => String(s).toUpperCase());
     if (suffix.includes('UNSIGNED')) col.unsigned = true;
     if (suffix.includes('ZEROFILL')) col.zerofill = true;
     if (def.auto_increment) col.autoIncrement = true;
     if (def.character_set?.value?.value) col.charset = String(def.character_set.value.value);
     if (def.collate?.collate?.name) col.collation = String(def.collate.collate.name);
-    if (def.comment?.value?.value != null) col.comment = String(def.comment.value.value);
+    if (def.comment?.value?.value != null) col.comment = unesc(String(def.comment.value.value));
     if (def.generated) {
       col.generated = {
         expression: stripOuterParens(exprText(def.generated.expr)),
@@ -77,7 +79,7 @@ export function parseDDL(sql: string): { content: WorkspaceContent; issues: Pars
     if (dv && !col.generated) {
       const kind = String(dv.type ?? '');
       if (kind === 'null') col.default = { kind: 'null' };
-      else if (kind === 'single_quote_string' || kind === 'double_quote_string') col.default = { kind: 'literal', value: String(dv.value) };
+      else if (kind === 'single_quote_string' || kind === 'double_quote_string') col.default = { kind: 'literal', value: unesc(String(dv.value)) };
       else if (kind === 'number') col.default = { kind: 'literal', value: String(dv.value) };
       else if (kind === 'bool') col.default = { kind: 'literal', value: dv.value ? '1' : '0' };
       else if (kind === 'bit_string') col.default = { kind: 'expression', value: `b'${dv.value}'` };
@@ -159,7 +161,7 @@ export function parseDDL(sql: string): { content: WorkspaceContent; issues: Pars
       else if (kw === 'auto_increment') t.autoIncrementStart = Number(op.value);
       else if (kw.includes('charset') || kw.includes('character set')) t.charset = String(op.value?.value ?? op.value);
       else if (kw === 'collate') t.collation = String(op.value?.value ?? op.value);
-      else if (kw === 'comment') t.comment = String(op.value ?? '').replace(/^'([\s\S]*)'$/, '$1').replace(/''/g, "'");
+      else if (kw === 'comment') t.comment = unesc(String(op.value ?? '').replace(/^'([\s\S]*)'$/, '$1'));
     }
     content.tables.push(t);
   }
